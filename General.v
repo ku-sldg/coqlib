@@ -1,6 +1,7 @@
 Require Import Coq.Program.Equality.
+Require Import Tactics.Combinators.
 
-(* `inv` modified from the `StructTact` library definition:
+(* Modified from the `StructTact` library definition:
    https://github.com/uwplse/StructTact/blob/a0f4aa3491edf27cf70ea5be3190b7efa8899971/theories/StructTactics.v#L17
  *)
 Ltac inv H := inversion H; subst; try contradiction.
@@ -78,90 +79,22 @@ Tactic Notation "pose" "new" "proof" constr(H) "as" ident(H2) :=
   pose proof H as H2.
 
 
-(* Generalizes the entire context *)
-Ltac generalize_max := 
-  repeat match goal with 
-  | [H: _ |- _] => generalize dependent H
-  end.
-
-(* Attempts to maximally generalize before beginning induction *)
-Ltac max_induction x :=
-  move x at top;
-  generalize_max;
-  induction x.
-
 (* Maximally recursive split *)
 Ltac _max_split := try (split; _max_split).
 Tactic Notation "max" "split" := _max_split.
 
 
+(* Copy a hypothesis *)
+Tactic Notation "copy" hyp(H) :=
+  let H' := fresh H in
+  pose proof H as H'.
+
+Tactic Notation "copy" hyp(H) ident(I) := pose proof H as I.
+
 (* When `unset x` is invoked with hypothesis `x := t` (commonly introduced by 
    tactic `set`), replaces all instances of `x` with `t`, and clears `x`.
  *)
 Ltac unset x := unfold x in *; clear x.
-
-
-(* `gen`/`to` tactics. Generalizes the term (: A) by a predicate (: A -> Prop)
-   Useful when generalizing an inductive principle.
-   For instance, `gen z := (x :: y) to (Permutation (x :: y)) in H by reflexivity`
-   replaces instances of (x :: y) in H with `z`, and adds the assumption
-   `Permutation (x :: y) z` to the goal.
- *)
-
-(* A version of cut where the assumption is the first subgoal *)
-Ltac cut_flip p :=
-  let H := fresh in
-  assert (H: p); 
-    [|revert H].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P):=
-  let I' := fresh I in 
-  set (I' := l);
-  cut_flip (P I');
-    [ unset I'
-    | clearbody I'
-    ].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P)
-  "in" hyp(H) :=
-  let I' := fresh I in 
-  set (I' := l) in H;
-  cut_flip (P I'); 
-    [ unset I'
-    | clearbody I'
-    ].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P)
-  "in" "*" :=
-  let I' := fresh I in 
-  set (I' := l) in *;
-  cut_flip (P I'); 
-    [ unset I'
-    | clearbody I'
-    ].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P)
-  "by" tactic(tac) :=
-  gen I := l to P; [solve [tac]|].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P)
-  "in" hyp(H) "by" tactic(tac) :=
-  gen I := l to P in H; [solve [tac]|].
-
-Tactic Notation "gen" ident(I) ":=" constr(l) "to" uconstr(P)
-  "in" "*" "by" tactic(tac) :=
-  gen I := l to P in *; [solve [tac]|].
-
-(* `gen eq` variant uses equality as the relation and solves the contraint 
-   automatically by reflexivity *)
-Tactic Notation "gen" "eq" ident(i) ":=" uconstr(u) :=
- gen i := u to (eq u) by reflexivity.
-
-Tactic Notation "gen" "eq" ident(i) ":=" uconstr(u) "in" hyp(H) :=
- gen i := u to (eq u) in H by reflexivity.
-
-Tactic Notation "gen" "eq" ident(i) ":=" uconstr(u) "in" "*" :=
- gen i := u to (eq u) in * by reflexivity.
 
 
 (* A sylistic alias for `admit`. Used to distinguish admitted goals
@@ -199,7 +132,6 @@ Tactic Notation "max" "cuth" hyp(H) := _max_cuth.
 Ltac _max_cuth_by H tac := try (cuth H; [tac|_max_cuth]).
 Tactic Notation "max" "cuth" hyp(H) "by" tactic(tac) := _max_cuth_by H tac.
 
-
 (* Solve a (registered) reflexive relation by proving the arguments equal *)
 Ltac reflexive := 
   match goal with 
@@ -211,9 +143,9 @@ Ltac reflexive :=
   end.
 
 
-(* `Dependent inv`. Sometimes, inversion leaves behind equalities of existT terms.
-   This tactic performs inversion then uses dependent destruction to break thsee 
-   existT equalities down into further equalities.
+(* Dependent inv
+   Sometime, inversion leaves behind equalities of existT terms. This tactic 
+   uses dependent destruction to break these into further equalities.
    (Note, this leverages axioms about equality)
  *)
 
